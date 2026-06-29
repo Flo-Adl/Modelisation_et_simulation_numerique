@@ -1,4 +1,5 @@
-# Projet Adell - Rigaud - Belaidi - Hassaine
+# Projet modélisation, simulation & optimisation de systèmes
+Adell - Rigaud - Belaidi - Hassaine
 <br><br>
 
 # Visualisation en ligne
@@ -33,7 +34,4 @@ streamlit run app.py
 ```
 <br>
 
-
-![Texte alternatif](pictures/appstreamlit.JPG)
-![Texte alternatif](pictures/appstreamlit2.JPG)
-![Texte alternatif](pictures/appstreamlit3.JPG)
+![Texte alternatif](pictures/cover.JPG)
