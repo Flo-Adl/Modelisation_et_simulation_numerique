@@ -29,9 +29,9 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.sidebar.header("Paramètres") 
 st.sidebar.markdown("<br>", unsafe_allow_html=True) 
 
-# --------------------------------------------------------- 
+# =========================================================
 # SOURCE DES DONNÉES 
-# --------------------------------------------------------- 
+# =========================================================
 data_source = st.sidebar.radio( "Source des données", [ "Données synthétiques", "NASA CMAPSS (fichiers locaux)" ] ) 
 
 # ========================================================= 
@@ -85,17 +85,15 @@ CMAPSS_SENSOR_MAP = {
 # =========================================================
 
 def load_cmapss(train_path, rul_path):
-    # Chargement fichier d'entraînement
     df = pd.read_csv(train_path, sep=r"\s+", header=None, names=CMAPSS_COLS)
-    df.dropna(axis=1, how="all", inplace=True)  # supprime colonnes vides en fin de ligne
+    df.dropna(axis=1, how="all", inplace=True) 
 
-    # Calcul du RUL : pour chaque moteur, RUL = nb_cycles_total - cycle_courant
+    # RUL = nb_cycles_total - cycle_courant
     max_cycle = df.groupby("engine_id")["cycle"].max()
     df = df.join(max_cycle.rename("max_cycle"), on="engine_id")
     df["RUL"] = df["max_cycle"] - df["cycle"]
     df.drop(columns=["max_cycle"], inplace=True)
 
-    # Renommage des capteurs pour correspondre à notre modèle
     for feature_name, sensor_col in CMAPSS_SENSOR_MAP.items():
         df[feature_name] = df[sensor_col]
     return df
@@ -103,7 +101,7 @@ def load_cmapss(train_path, rul_path):
 def generate_engine_data(engine_id, max_cycles):
     life   = np.random.randint(80, max_cycles)
     cycles = np.arange(1, life + 1)
-    rul    = life - cycles
+    rul    = life - cycles       # RUL(t) = T_failure - t
 
     # Palier initial : dégradation commence à 20% de la vie
     degradation_start = int(0.20 * life)
@@ -131,14 +129,12 @@ def generate_engine_data(engine_id, max_cycles):
 
     return df
 
-# --- Chargement selon le mode choisi ---
 if data_source == "NASA CMAPSS (fichiers locaux)":
     train_path = f"data/train_{dataset_choice}.txt"
     rul_path   = f"data/RUL_{dataset_choice}.txt"
 
     try:
         data = load_cmapss(train_path, rul_path)
-        # On limite à N_ENGINES moteurs pour rester cohérent avec le slider
         engines_available = sorted(data["engine_id"].unique())
         engines_kept = engines_available[:N_ENGINES]
         data = data[data["engine_id"].isin(engines_kept)].copy()
@@ -180,13 +176,18 @@ rf = RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jo
 rf.fit(X_train, y_train)
 y_pred_rf = np.clip(rf.predict(X_test), 0, None)
 
-# Métriques
+# MAE  = (1/n) * sum(|yi - yi_hat|)
+# RMSE = sqrt((1/n) * sum((yi - yi_hat)^2))
+# R²   = 1 - sum((yi - yi_hat)^2) / sum((yi - y_bar)^2)
 def compute_metrics(y_true, y_pred):
-    return {
-        "MAE":  mean_absolute_error(y_true, y_pred),
-        "RMSE": np.sqrt(mean_squared_error(y_true, y_pred)),
-        "R2":   r2_score(y_true, y_pred),
-    }
+    n = len(y_true)
+    residuals = y_true - y_pred                           # yi - yi_hat
+    mae  = np.sum(np.abs(residuals)) / n                  # MAE
+    rmse = np.sqrt(np.sum(residuals**2) / n)              # RMSE
+    ss_res = np.sum(residuals**2)                         # sum((yi - yi_hat)^2)
+    ss_tot = np.sum((y_true - y_true.mean())**2)          # sum((yi - y_bar)^2)
+    r2   = 1 - ss_res / ss_tot                            # R²
+    return {"MAE": mae, "RMSE": rmse, "R2": r2}
 
 metrics_lr = compute_metrics(y_test, y_pred_lr)
 metrics_rf = compute_metrics(y_test, y_pred_rf)
@@ -206,9 +207,9 @@ tab1, tab2, tab3, tab4, tab5 ,tab6= st.tabs([
     "Objectifs",
 ])
 
-# ─────────────────────────────────────────────
+# =========================================================
 # TAB 1 — KPIs et Données
-# ─────────────────────────────────────────────
+# =========================================================
 with tab1:
     st.subheader("Métriques du meilleur modèle (Random Forest)")
     st.caption("MAE = erreur absolue moyenne | RMSE = erreur quadratique | R2 = qualité d'ajustement global")
@@ -231,9 +232,9 @@ with tab1:
     csv = data.to_csv(index=False).encode("utf-8")
     st.download_button("Télécharger dataset CSV", csv, "engines_dataset.csv", "text/csv")
 
-# ─────────────────────────────────────────────
+# =========================================================
 # TAB 2 — Modèles et Comparaison
-# ─────────────────────────────────────────────
+# =========================================================
 with tab2:
     st.subheader("Comparaison : Régression Linéaire vs Random Forest")
 
@@ -281,9 +282,9 @@ with tab2:
     st.caption("Un bon modèle a des résidus centrés sur 0 et symétriques. "
             "Un biais systématique indique une erreur de modélisation.")
 
-# ─────────────────────────────────────────────
+# =========================================================
 # TAB 3 — Visualisation Capteurs
-# ─────────────────────────────────────────────
+# =========================================================
 with tab3:
     st.subheader("Evolution des capteurs & RUL")
     if data_source == "Données synthétiques":
@@ -314,9 +315,9 @@ with tab3:
                           title=f"Evolution RUL — Moteur {engine_sel}")
     st.plotly_chart(fig_rul, use_container_width=True)
 
-# ─────────────────────────────────────────────
+# =========================================================
 # TAB 4 — Contraintes & Optimisation
-# ─────────────────────────────────────────────
+# =========================================================
 with tab4:
     st.subheader("Contraintes du problème d'optimisation")
     st.info(
@@ -328,7 +329,7 @@ with tab4:
     latest = data.groupby("engine_id").tail(1).copy()
     latest["RUL_pred"] = np.clip(rf.predict(latest[FEATURES]), 0, None)
 
-    # g1 — sécurité
+    # g1(x) <= 0  <=>  RULi >= RUL_crit  pour tout moteur i
     latest["g1_violée"] = latest["RUL_pred"] <= RUL_CRIT
 
     # Variable de décision xi
@@ -339,12 +340,12 @@ with tab4:
         latest["cycle"] + (latest["RUL_pred"] / 2).astype(int)
     )
 
-    # g2 — capacité atelier
+    # g2(x) <= 0  <=>  sum_i(1[xi == k]) <= K_maint  pour tout slot k
     slot_counts = latest["xi"].value_counts().rename("nb_interventions")
     latest = latest.join(slot_counts, on="xi")
     latest["g2_violée"] = latest["nb_interventions"] > K_MAINT
 
-    # g3 — disponibilité flotte
+    # g3(x) <= 0  <=>  sum_i(1[xi == k]) <= N - N_min  pour tout k
     total_engines = len(latest)
     min_dispo = total_engines - slot_counts.max() if len(slot_counts) > 0 else total_engines
     g3_ok = min_dispo >= N_MIN
@@ -383,9 +384,9 @@ with tab4:
     )
     st.plotly_chart(fig_plan, use_container_width=True)
 
-# ─────────────────────────────────────────────
+# =========================================================
 # TAB 5 — Validation & Critique
-# ─────────────────────────────────────────────
+# =========================================================
 with tab5:
     st.subheader("Validation et critique de la solution")
 
@@ -418,11 +419,9 @@ with tab5:
     st.write(f"- **g2** (capacité atelier) : max {slot_counts.max() if len(slot_counts) else 0} " f"interventions simultanées / {K_MAINT} max — " + ("Surcharge détectée" if latest['g2_violée'].any() else "Satisfaite"))
     st.write(f"- **g3** (dispo. flotte) : {min_dispo} avions disponibles / {N_MIN} requis — " + ("Satisfaite" if g3_ok else "Non satisfaite"))
     
-# ─────────────────────────────────────────────
-
+# =========================================================
 # TAB 6 — Fonction Objectif
-
-# ─────────────────────────────────────────────
+# =========================================================
 
 with tab6:
     st.subheader("Formulation de la fonction objectif")
@@ -459,10 +458,20 @@ with tab6:
     # =====================================================
 
     latest_obj = latest.copy()
-    latest_obj["P_panne"] = np.clip(1 - (latest_obj["RUL_pred"] / latest_obj["RUL_pred"].max()),0,1)
-    latest_obj["C_planifie"] = np.where(latest_obj["RUL_pred"] <= RUL_CRIT,C_prog,0.5 * C_prog)
-    latest_obj["C_panne_esp"] = (C_panne * latest_obj["P_panne"])
-    latest_obj["C_total"] = (latest_obj["C_planifie"]+ latest_obj["C_panne_esp"])
+
+    # P_panne,i = 1 - RUL_pred_i / max(RUL_pred)
+    rul_max = latest_obj["RUL_pred"].max()
+    latest_obj["P_panne"] = np.clip(1 - latest_obj["RUL_pred"] / rul_max, 0, 1)
+
+    # C_planifié(x) = C_prog * sum_i(1[xi > 0]) 
+    latest_obj["indicatrice_xi"] = (latest_obj["xi"] > 0).astype(int)  # 1[xi > 0]
+    latest_obj["C_planifie"] = C_prog * latest_obj["indicatrice_xi"]
+
+    # C_panne_esp(x) = C_panne * sum_i( P_panne,i(xi))
+    latest_obj["C_panne_esp"] = C_panne * latest_obj["P_panne"]
+
+    #  f(x) = C_planifié(x) + C_panne_esp(x)
+    latest_obj["C_total"] = latest_obj["C_planifie"] + latest_obj["C_panne_esp"]
 
     # =====================================================
     # KPI ECONOMIQUES
@@ -524,4 +533,3 @@ with tab6:
 
     st.markdown("### Détail économique par moteur")
     st.dataframe(latest_obj[["engine_id","RUL_pred","P_panne","C_planifie","C_panne_esp","C_total"]],use_container_width=True)
-        
