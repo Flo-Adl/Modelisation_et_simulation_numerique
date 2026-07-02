@@ -69,15 +69,15 @@ CMAPSS_COLS = [
 ]
 
 # Les 4 capteurs retenus dans notre modèle, mappés sur les capteurs CMAPSS
-# s2  = température sortie fan (proxy EGT)
-# s4  = pression sortie compresseur (proxy Pratio)
-# s11 = température sortie compresseur (proxy Vfan par corrélation)
-# s17 = rendement compresseur (proxy SFC)
+# s2  = température sortie fan (EGT = Text)
+# s4  = pression sortie compresseur (Pratio)
+# s11 = température sortie compresseur (Vfan)
+# s17 = rendement compresseur (SFC)
 CMAPSS_SENSOR_MAP = {
-    "EGT":    "s2",
+    "EGT": "s2",
     "Pratio": "s4",
-    "Vfan":   "s11",
-    "SFC":    "s17",
+    "Vfan": "s11",
+    "SFC": "s17",
 }
 
 # =========================================================
@@ -99,19 +99,19 @@ def load_cmapss(train_path, rul_path):
     return df
 
 def generate_engine_data(engine_id, max_cycles):
-    life   = np.random.randint(80, max_cycles)
+    life = np.random.randint(80, max_cycles)
     cycles = np.arange(1, life + 1)
-    rul    = life - cycles       # RUL(t) = T_failure - t
+    rul = life - cycles       # RUL(t) = T_failure - t
 
     # Palier initial : dégradation commence à 20% de la vie
     degradation_start = int(0.20 * life)
     ramp = np.zeros(life)
     ramp[degradation_start:] = np.arange(life - degradation_start)
 
-    egt = 600 + 0.8   * ramp + np.random.normal(0, 5, life)
+    egt = 600 + 0.8 * ramp + np.random.normal(0, 5, life)
     sfc = 0.3 + 0.002 * ramp + 0.0003 * (egt - 600) + np.random.normal(0, 0.01, life)
-    vfan = 0.5 + 0.01  * ramp + np.abs(np.random.normal(0, 0.05, life))
-    pratio = 30 - 0.05  * ramp + np.random.normal(0, 0.3, life)
+    vfan = 0.5 + 0.01 * ramp + np.abs(np.random.normal(0, 0.05, life))
+    pratio = 30 - 0.05 * ramp + np.random.normal(0, 0.3, life)
 
     df = pd.DataFrame({
         "engine_id": engine_id,
@@ -131,7 +131,7 @@ def generate_engine_data(engine_id, max_cycles):
 
 if data_source == "NASA CMAPSS (fichiers locaux)":
     train_path = f"data/train_{dataset_choice}.txt"
-    rul_path   = f"data/RUL_{dataset_choice}.txt"
+    rul_path = f"data/RUL_{dataset_choice}.txt"
 
     try:
         data = load_cmapss(train_path, rul_path)
@@ -144,12 +144,9 @@ if data_source == "NASA CMAPSS (fichiers locaux)":
 
 else:
     # Données synthétiques
-    dfs  = [generate_engine_data(i, MAX_CYCLES) for i in range(N_ENGINES)]
+    dfs = [generate_engine_data(i, MAX_CYCLES) for i in range(N_ENGINES)]
     data = pd.concat(dfs, ignore_index=True)
-    data[["EGT","Vfan","Pratio","SFC"]] = (
-        data.groupby("engine_id")[["EGT","Vfan","Pratio","SFC"]]
-        .transform(lambda s: s.interpolate().ffill().bfill())
-    )
+    data[["EGT","Vfan","Pratio","SFC"]] = (data.groupby("engine_id")[["EGT","Vfan","Pratio","SFC"]].transform(lambda s: s.interpolate().ffill().bfill()))
 
 # =========================================================
 # MACHINE LEARNING
@@ -158,10 +155,7 @@ FEATURES = ["cycle", "EGT", "Vfan", "Pratio", "SFC"]
 X = data[FEATURES]
 y = data["RUL"]
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=TEST_SIZE, random_state=42
-)
-
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=TEST_SIZE, random_state=42)
 scaler     = StandardScaler()
 X_train_sc = scaler.fit_transform(X_train)
 X_test_sc  = scaler.transform(X_test)
@@ -176,17 +170,17 @@ rf = RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42, n_jo
 rf.fit(X_train, y_train)
 y_pred_rf = np.clip(rf.predict(X_test), 0, None)
 
-# MAE  = (1/n) * sum(|yi - yi_hat|)
+# MAE = (1/n) * sum(|yi - yi_hat|)
 # RMSE = sqrt((1/n) * sum((yi - yi_hat)^2))
-# R²   = 1 - sum((yi - yi_hat)^2) / sum((yi - y_bar)^2)
+# R² = 1 - sum((yi - yi_hat)^2) / sum((yi - y_bar)^2)
 def compute_metrics(y_true, y_pred):
     n = len(y_true)
     residuals = y_true - y_pred                           # yi - yi_hat
-    mae  = np.sum(np.abs(residuals)) / n                  # MAE
+    mae = np.sum(np.abs(residuals)) / n                   # MAE
     rmse = np.sqrt(np.sum(residuals**2) / n)              # RMSE
     ss_res = np.sum(residuals**2)                         # sum((yi - yi_hat)^2)
     ss_tot = np.sum((y_true - y_true.mean())**2)          # sum((yi - y_bar)^2)
-    r2   = 1 - ss_res / ss_tot                            # R²
+    r2 = 1 - ss_res / ss_tot                              # R²
     return {"MAE": mae, "RMSE": rmse, "R2": r2}
 
 metrics_lr = compute_metrics(y_test, y_pred_lr)
@@ -226,8 +220,7 @@ with tab1:
         st.caption(f"Source : NASA CMAPSS : {dataset_choice}")
     else:
         st.caption("Source : données synthétiques. NaN imputés par interpolation linéaire.")
-    st.dataframe(data[["engine_id","cycle","RUL","EGT","Vfan","Pratio","SFC"]].head(len(data)),
-                 use_container_width=True)
+    st.dataframe(data[["engine_id","cycle","RUL","EGT","Vfan","Pratio","SFC"]].head(len(data)), use_container_width=True)
 
     csv = data.to_csv(index=False).encode("utf-8")
     st.download_button("Télécharger dataset CSV", csv, "engines_dataset.csv", "text/csv")
@@ -239,44 +232,35 @@ with tab2:
     st.subheader("Comparaison : Régression Linéaire vs Random Forest")
 
     df_compare = pd.DataFrame({
-        "Métrique": ["MAE", "RMSE", "R2",f"R2 CV ({K_FOLDS}-fold) moy.", "R2 CV std"],
-        "Régression Lin.": [f"{metrics_lr['MAE']:.2f}", f"{metrics_lr['RMSE']:.2f}", f"{metrics_lr['R2']:.3f}",f"{cv_lr.mean():.3f}", f"{cv_lr.std():.3f}"],
-        "Random Forest": [f"{metrics_rf['MAE']:.2f}", f"{metrics_rf['RMSE']:.2f}",f"{metrics_rf['R2']:.3f}",f"{cv_rf.mean():.3f}", f"{cv_rf.std():.3f}"]})
+        "Métrique": ["MAE", "RMSE", "R2"],
+        "Régression Lin.": [f"{metrics_lr['MAE']:.2f}", f"{metrics_lr['RMSE']:.2f}", f"{metrics_lr['R2']:.3f}"],
+        "Random Forest": [f"{metrics_rf['MAE']:.2f}", f"{metrics_rf['RMSE']:.2f}",f"{metrics_rf['R2']:.3f}"]})
     st.dataframe(df_compare, use_container_width=True, hide_index=True)
 
     col_a, col_b = st.columns(2)
     with col_a:
         st.markdown("**Régression Linéaire** : RUL prédit vs réel")
         fig_lr = go.Figure()
-        fig_lr.add_trace(go.Scatter(x=y_test, y=y_pred_lr, mode="markers",
-                                    marker=dict(size=4, opacity=0.5), name="LR"))
-        fig_lr.add_trace(go.Scatter(x=[0, int(y_test.max())], y=[0, int(y_test.max())],
-                                    mode="lines", line=dict(dash="dash", color="red"),
-                                    name="Parfait"))
+        fig_lr.add_trace(go.Scatter(x=y_test, y=y_pred_lr, mode="markers", marker=dict(size=4, opacity=0.5), name="LR"))
+        fig_lr.add_trace(go.Scatter(x=[0, int(y_test.max())], y=[0, int(y_test.max())], mode="lines", line=dict(dash="dash", color="red"), name="Parfait"))
         fig_lr.update_layout(xaxis_title="RUL réel", yaxis_title="RUL prédit", height=400)
         st.plotly_chart(fig_lr, use_container_width=True)
 
     with col_b:
         st.markdown("**Random Forest** : RUL prédit vs réel")
         fig_rf = go.Figure()
-        fig_rf.add_trace(go.Scatter(x=y_test, y=y_pred_rf, mode="markers",
-                                    marker=dict(size=4, opacity=0.5, color="green"), name="RF"))
-        fig_rf.add_trace(go.Scatter(x=[0, int(y_test.max())], y=[0, int(y_test.max())],
-                                    mode="lines", line=dict(dash="dash", color="red"),
-                                    name="Parfait"))
+        fig_rf.add_trace(go.Scatter(x=y_test, y=y_pred_rf, mode="markers", marker=dict(size=4, opacity=0.5, color="green"), name="RF"))
+        fig_rf.add_trace(go.Scatter(x=[0, int(y_test.max())], y=[0, int(y_test.max())], mode="lines", line=dict(dash="dash", color="red"), name="Parfait"))
         fig_rf.update_layout(xaxis_title="RUL réel", yaxis_title="RUL prédit", height=400)
         st.plotly_chart(fig_rf, use_container_width=True)
 
     importances = pd.Series(rf.feature_importances_, index=FEATURES).sort_values()
-    fig_imp = px.bar(importances, orientation="h",
-                     labels={"value": "Importance", "index": "Capteur"},
-                     title="Feature Importance")
+    fig_imp = px.bar(importances, orientation="h", labels={"value": "Importance", "index": "Capteur"}, title="Feature Importance")
     st.plotly_chart(fig_imp, use_container_width=True)
     st.caption("Indique quels capteurs contribuent le plus à la prédiction du RUL.")
 
     residuals = y_test - y_pred_rf
-    fig_res = px.histogram(residuals, nbins=40,
-                           title="Résidus = RUL réel - RUL prédit (RF)")
+    fig_res = px.histogram(residuals, nbins=40, title="Résidus = RUL réel - RUL prédit (RF)")
     fig_res.add_vline(x=0, line_dash="dash", line_color="red")
     st.plotly_chart(fig_res, use_container_width=True)
     st.caption("Un bon modèle a des résidus centrés sur 0 et symétriques. "
@@ -296,23 +280,15 @@ with tab3:
     engine_df["RUL_pred_RF"] = np.clip(rf.predict(engine_df[FEATURES]), 0, None)
 
     sensor = st.selectbox("Capteur à afficher", ["EGT", "Vfan", "Pratio", "SFC"])
-    fig_s  = px.line(engine_df, x="cycle", y=sensor,
-                     title=f"{sensor} — Moteur {engine_sel}")
+    fig_s  = px.line(engine_df, x="cycle", y=sensor, title=f"{sensor} — Moteur {engine_sel}")
     st.plotly_chart(fig_s, use_container_width=True)
 
     fig_rul = go.Figure()
-    fig_rul.add_trace(go.Scatter(x=engine_df["cycle"], y=engine_df["RUL"],
-                                 mode="lines", name="RUL réel",
-                                 line=dict(color="steelblue")))
-    fig_rul.add_trace(go.Scatter(x=engine_df["cycle"], y=engine_df["RUL_pred_RF"],
-                                 mode="lines", name="RUL prédit (RF)",
-                                 line=dict(color="green", dash="dash")))
-    fig_rul.add_hline(y=RUL_CRIT, line_dash="dot", line_color="orange",
-                      annotation_text=f"Seuil critique g1 = {RUL_CRIT} cycles")
-    fig_rul.add_hrect(y0=0, y1=RUL_CRIT, fillcolor="red", opacity=0.07,
-                      annotation_text="Zone danger")
-    fig_rul.update_layout(xaxis_title="Cycle", yaxis_title="RUL (cycles)",
-                          title=f"Evolution RUL — Moteur {engine_sel}")
+    fig_rul.add_trace(go.Scatter(x=engine_df["cycle"], y=engine_df["RUL"], mode="lines", name="RUL réel", line=dict(color="steelblue")))
+    fig_rul.add_trace(go.Scatter(x=engine_df["cycle"], y=engine_df["RUL_pred_RF"], mode="lines", name="RUL prédit (RF)", line=dict(color="green", dash="dash")))
+    fig_rul.add_hline(y=RUL_CRIT, line_dash="dot", line_color="orange", annotation_text=f"Seuil critique g1 = {RUL_CRIT} cycles")
+    fig_rul.add_hrect(y0=0, y1=RUL_CRIT, fillcolor="red", opacity=0.07, annotation_text="Zone danger")
+    fig_rul.update_layout(xaxis_title="Cycle", yaxis_title="RUL (cycles)", title=f"Evolution RUL — Moteur {engine_sel}")
     st.plotly_chart(fig_rul, use_container_width=True)
 
 # =========================================================
@@ -334,11 +310,7 @@ with tab4:
 
     # Variable de décision xi
     # Maintenance urgente si g1 violée, sinon préventive à RUL_pred/2
-    latest["xi"] = np.where(
-        latest["g1_violée"],
-        latest["cycle"] + 1,
-        latest["cycle"] + (latest["RUL_pred"] / 2).astype(int)
-    )
+    latest["xi"] = np.where(latest["g1_violée"], latest["cycle"] + 1, latest["cycle"] + (latest["RUL_pred"] / 2).astype(int))
 
     # g2(x) <= 0  <=>  sum_i(1[xi == k]) <= K_maint  pour tout slot k
     slot_counts = latest["xi"].value_counts().rename("nb_interventions")
@@ -415,9 +387,9 @@ with tab5:
 
     st.markdown("### 3. Vérification des contraintes")
     st.caption("Toutes les contraintes doivent être satisfaites pour que x* soit admissible.")
-    st.write(f"- **g1** (RUL critique) : {n_g1} moteur(s) critique(s) — " + ("Maintenance urgente à planifier" if n_g1 > 0 else "Satisfaite"))
-    st.write(f"- **g2** (capacité atelier) : max {slot_counts.max() if len(slot_counts) else 0} " f"interventions simultanées / {K_MAINT} max — " + ("Surcharge détectée" if latest['g2_violée'].any() else "Satisfaite"))
-    st.write(f"- **g3** (dispo. flotte) : {min_dispo} avions disponibles / {N_MIN} requis — " + ("Satisfaite" if g3_ok else "Non satisfaite"))
+    st.write(f"- **g1** (RUL critique) : {n_g1} moteur(s) critique(s) : " + ("Maintenance urgente à planifier" if n_g1 > 0 else "Satisfaite"))
+    st.write(f"- **g2** (capacité atelier) : max {slot_counts.max() if len(slot_counts) else 0} " f"interventions simultanées / {K_MAINT} max : " + ("Surcharge détectée" if latest['g2_violée'].any() else "Satisfaite"))
+    st.write(f"- **g3** (dispo. flotte) : {min_dispo} avions disponibles / {N_MIN} requis : " + ("Satisfaite" if g3_ok else "Non satisfaite"))
     
 # =========================================================
 # TAB 6 — Fonction Objectif
@@ -480,7 +452,6 @@ with tab6:
     st.markdown("### Analyse économique")
 
     k1, k2, k3, k4 = st.columns(4)
-
     k1.metric("Coût maintenance",f"{latest_obj['C_planifie'].sum():,.0f} €")
     k2.metric("Coût panne espéré",f"{latest_obj['C_panne_esp'].sum():,.0f} €")
     k3.metric("Coût total f(x)",f"{latest_obj['C_total'].sum():,.0f} €")
@@ -492,12 +463,7 @@ with tab6:
     # =====================================================
 
     st.markdown("### Répartition des coûts")
-
-    fig_cost = px.bar(latest_obj,x="engine_id",
-                y=["C_planifie", "C_panne_esp"],
-                title="Décomposition des coûts par moteur",
-                labels={"value": "Coût (€)","engine_id": "Moteur"
-                },barmode="stack")
+    fig_cost = px.bar(latest_obj,x="engine_id", y=["C_planifie", "C_panne_esp"], title="Décomposition des coûts par moteur", labels={"value": "Coût (€)","engine_id": "Moteur"},barmode="stack")
     st.plotly_chart(fig_cost, use_container_width=True)
 
     # =====================================================
@@ -517,7 +483,6 @@ with tab6:
 
     maintenance_cost = 100 - x_trade
     failure_cost = x_trade**1.5 / 10
-
     total_cost = maintenance_cost + failure_cost
 
     fig_tradeoff.add_trace(go.Scatter(x=x_trade,y=maintenance_cost,mode="lines",name="Coût maintenance"))
